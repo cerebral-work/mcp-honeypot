@@ -142,9 +142,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # gitleaks-action requires a paid GITLEAKS_LICENSE for org-owned repos;
+      # the gitleaks CLI itself is MIT — run it directly instead.
+      - name: Run gitleaks
+        run: >
+          docker run --rm -v "$PWD:/repo"
+          zricethezav/gitleaks:v8.24.3
+          detect --source /repo --config /repo/.gitleaks.toml
+          --no-banner --redact
 
   docker:
     name: Docker build
