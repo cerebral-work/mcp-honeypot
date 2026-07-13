@@ -3,7 +3,7 @@ mcp==1.6.0
 
 # ASGI server
 uvicorn[standard]==0.42.0
-starlette==0.46.1
+starlette==1.3.1
 
 # OpenTelemetry — SDK
 opentelemetry-sdk==1.32.0
