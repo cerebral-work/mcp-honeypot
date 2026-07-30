@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.1.0 (2026-07-30)
+
+
+### Features
+
+* apply terrarium federation standards ([b75804d](https://github.com/cerebral-work/mcp-honeypot/commit/b75804d1779036d68b4b9349d81ca7eef23ea95e))
+
+
+### Bug Fixes
+
+* **deps:** align opentelemetry-instrumentation-asgi with the 0.53b0 line (unbreaks all PR CI) ([#33](https://github.com/cerebral-work/mcp-honeypot/issues/33)) ([5b2e420](https://github.com/cerebral-work/mcp-honeypot/commit/5b2e42009143d3175f22aa64dd3aff3e96fc71eb))
+
 ## [Unreleased]
 
 ### Added
