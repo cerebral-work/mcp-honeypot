@@ -27,7 +27,7 @@ structlog==25.1.0
 slowapi==0.1.9
 
 # Testing
-pytest==8.3.5
+pytest==9.1.1
 pytest-asyncio==1.3.0
 pytest-cov==7.1.0
 httpx==0.28.1
