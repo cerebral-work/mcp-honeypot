@@ -34,7 +34,8 @@ from starlette.routing import Route
 
 setup_logging()
 
-from instrumentation import get_tracer, mcp_sessions_active, setup_telemetry  # noqa: E402
+import instrumentation  # noqa: E402
+from instrumentation import get_tracer, setup_telemetry  # noqa: E402
 
 setup_telemetry()
 
@@ -128,7 +129,7 @@ async def handle_sse(request: Request) -> None:
         agent_id=transport.agent_id,
     )
 
-    mcp_sessions_active.add(1)
+    instrumentation.mcp_sessions_active.add(1)
     try:
         async with sse_transport.connect_sse(
             request.scope,
@@ -142,7 +143,7 @@ async def handle_sse(request: Request) -> None:
                     mcp_server.create_initialization_options(),
                 )
     finally:
-        mcp_sessions_active.add(-1)
+        instrumentation.mcp_sessions_active.add(-1)
 
     logger.info(
         "sse_connection_closed",
