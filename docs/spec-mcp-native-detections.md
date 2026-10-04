@@ -121,7 +121,7 @@ Conventions for all flags:
   has `anomaly.flags` containing `unknown_method` and `mcp.method.raw` set.
   Negative: a notification `notifications/initialized` is not flagged.
 
-### D2. `request_before_initialize`
+### D2. `lifecycle_violation`
 
 - Signal: ordering. Any JSON-RPC request other than `initialize` and `ping` arrives on a
   connection before an `initialize` request was seen. Sub-signal
