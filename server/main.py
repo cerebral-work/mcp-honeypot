@@ -23,7 +23,7 @@ from typing import Any
 # ---------------------------------------------------------------------------
 # Bootstrap logging and telemetry (order matters)
 # ---------------------------------------------------------------------------
-from logging_config import get_logger, setup_logging
+from logging_config import get_logger, session_id_var, setup_logging
 from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 from mcp.types import TextContent, Tool
@@ -82,10 +82,8 @@ async def call_tool(
     """
     params = arguments or {}
 
-    # Retrieve the session_id from the logging context var (set by
-    # InstrumentedTransport on each incoming message).
-    from logging_config import session_id_var  # noqa: WPS433
-
+    # Retrieve the session_id from the logging context var (bound per
+    # connection in handle_sse).
     session_id = session_id_var.get() or "unknown"
 
     with tracer.start_as_current_span(
@@ -128,6 +126,11 @@ async def handle_sse(request: Request) -> None:
         session_id=transport.session_id,
         agent_id=transport.agent_id,
     )
+
+    # Bind the session id in this connection's own context. The MCP server's
+    # handler tasks are started from here and inherit it; a set() inside the
+    # transport's pump task would stay invisible to them.
+    session_id_var.set(transport.session_id)
 
     instrumentation.mcp_sessions_active.add(1)
     try:
