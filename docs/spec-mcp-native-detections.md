@@ -228,10 +228,11 @@ Conventions for all flags:
 - Hook: `handle_sse` (`main.py:119` already reads raw headers) and the POST wrapper in
   D9.
 - New capture: scheme (first token, lowercased, restricted to a vocabulary of `bearer`,
-  `basic`, `other`), length bucket, and a truncated SHA-256 prefix (first 12 hex) for
-  correlating reuse. Never the token value in any attribute, log or metric.
+  `basic`, `other`) and length bucket. Nothing derived from the credential itself: no
+  value and no hash, in any attribute, log or metric (operator ruling 2026-10-04,
+  decision 4).
 - False positives: clients configured with a token by habit. Informational only.
-- Tests: `Authorization: Bearer abc` yields scheme `bearer` and a 12-char hash, and a
+- Tests: `Authorization: Bearer abc` yields scheme `bearer` and a length bucket, and a
   test greps all span attributes and captured log output for the literal token and
   asserts it is absent. Negative: no header, no flag.
 
@@ -320,7 +321,7 @@ Conventions for all flags:
 | JSON-RPC `id` and kind (`request`, `notification`, `response`, `error`) | yes (`mcp.jsonrpc.id` as string, truncated; `mcp.message_kind`) | kind only (fixed vocabulary) | yes |
 | `Origin`, `Host`, `Referer`, `Sec-Fetch-*` | yes, truncated | never | yes |
 | SDK session UUID, probe session id | yes, truncated | never | yes |
-| Authorization metadata (D7) | scheme bucket and hash prefix | scheme bucket only | no raw value anywhere |
+| Authorization metadata (D7) | scheme bucket and length bucket | scheme bucket only | no raw value anywhere |
 | Unicode / ANSI findings | field path, counts, kinds | never | yes |
 
 Rules, which also bound this spec's interaction with TOD-1053:
@@ -397,6 +398,20 @@ Every phase is a separately mergeable PR. P1 changes no server responses.
 
 ## 6. Open decisions (for the lead to put to the operator)
 
+Rulings recorded 2026-10-04 (Christian, by interview in lane w18:p1):
+
+| # | Decision | Ruling |
+|---|---|---|
+| 1 | Release placement | A: patch line before v0.2.0 |
+| 2 | Phase ordering | A: message-level first, then HTTP layer, then cross-connection |
+| 4 | D7 credential handling | B: scheme bucket and length only, no hash |
+| 6 | Active probing | A: passive only |
+
+Decisions 3, 5, 7, 8 and 9 are still open. Each one's recommendation is the working
+default until it is ruled on. None of them blocks phase P1 except 3, whose
+recommendation (Tags block for the flag, other invisible characters as a count) only
+records data.
+
 1. **Release placement.** Where do P1 and P2 ship relative to the roadmap?
    - A: patch line before v0.2.0 (for example v0.1.2 "Protocol"); no responses change,
      so it is low risk and the data starts accumulating sooner.
@@ -419,7 +434,7 @@ Every phase is a separately mergeable PR. P1 changes no server responses.
      (`mcp.unicode.other_invisible_count`) so the question can be answered from data
      before widening the flag.
 4. **Credential header handling (D7).** How much of an `Authorization` header is stored?
-   - A: scheme bucket plus truncated hash prefix, as specced.
+   - A: scheme bucket plus truncated hash prefix (the first draft).
    - B: scheme bucket and length only, no hash.
    - C: drop D7 entirely (survey §11 is partial and unprovable here).
    - Recommendation: B. The hash adds reuse correlation but is still derived from
