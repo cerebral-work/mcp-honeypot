@@ -1,6 +1,6 @@
 # Spec: MCP-Native Detections
 
-Status: draft for operator review. Branch `feat/mcp-native-detections`, based on
+Status: design ruled by the operator 2026-10-04 (section 6); implementation pending. Branch `feat/mcp-native-detections`, based on
 `a511ad4`. No code changes accompany this document.
 
 Citations: `file:line` refers to the tree at `a511ad4`. "survey §N" refers to the
@@ -398,7 +398,7 @@ Every phase is a separately mergeable PR. P1 changes no server responses.
   the same hook; a dedicated fuzz detector is not specced (survey, Gaps and cautions 5).
 - Fixing the path_traversal gaps (TOD-1054) or the jury runner (TOD-1050).
 
-## 6. Open decisions (for the lead to put to the operator)
+## 6. Decisions (ruled 2026-10-04)
 
 Rulings recorded 2026-10-04 (Christian, by interview in lane w18:p1):
 
@@ -408,11 +408,14 @@ Rulings recorded 2026-10-04 (Christian, by interview in lane w18:p1):
 | 2 | Phase ordering | A: message-level first, then HTTP layer, then cross-connection |
 | 4 | D7 credential handling | B: scheme bucket and length only, no hash |
 | 6 | Active probing | A: passive only |
+| 3 | D5 hidden-character breadth | A for the flag (Tags block only), with zero-width and bidi recorded as `mcp.unicode.other_invisible_count` |
+| 5 | Secret-shaped material in tool arguments | C: separate spec later |
+| 7 | D9 if the SDK UUID mapping proves unreliable | A: ship `session_id_probe` alone, drop `session_id_cross_source` |
+| 8 | Flag-name freeze | Freeze all names in section 2 now except D9 and D10, which stay provisional |
+| 9 | D8 `expected_hosts` | B: required when `HONEYPOT_PHASE=public` |
 
-Decisions 3, 5, 7, 8 and 9 are still open. Each one's recommendation is the working
-default until it is ruled on. None of them blocks phase P1 except 3, whose
-recommendation (Tags block for the flag, other invisible characters as a count) only
-records data.
+All nine decisions are ruled. The option lists below are kept as the record of what was
+offered.
 
 1. **Release placement.** Where do P1 and P2 ship relative to the roadmap?
    - A: patch line before v0.2.0 (for example v0.1.2 "Protocol"); no responses change,
