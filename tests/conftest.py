@@ -12,6 +12,7 @@ _MODULE_FILES = {
     "test_middleware",
     "test_main",
     "test_integration",
+    "test_sse_session",
 }
 _TOOL_FILES = {"test_adversarial_agent", "test_export", "test_harness"}
 _INTEGRATION_FILES = {"test_fingerprinting"}
