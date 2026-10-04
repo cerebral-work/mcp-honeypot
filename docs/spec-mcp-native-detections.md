@@ -4,8 +4,10 @@ Status: draft for operator review. Branch `feat/mcp-native-detections`, based on
 `a511ad4`. No code changes accompany this document.
 
 Citations: `file:line` refers to the tree at `a511ad4`. "survey §N" refers to the
-attack-class survey (`survey-fugu.md`, 15 classes). "gaps §N" refers to the code gap
-analysis (`gaps-kimi.md`). Statements about SDK `mcp==1.6.0` internals come from those
+attack-class survey (`docs/research/2026-10-04-mcp-attack-survey.md`, 15 classes; its
+14 URLs were fetched and checked in `docs/research/2026-10-04-mcp-attack-survey-citation-check.md`).
+"gaps §N" refers to the code gap analysis (`docs/research/2026-10-04-code-gap-analysis.md`,
+written against `590ede9`, before #46 and #47). Statements about SDK `mcp==1.6.0` internals come from those
 two surfaces and were not re-verified against the wheel while writing this spec; each is
 marked "(per gaps)" and must be confirmed by the test named next to it.
 
