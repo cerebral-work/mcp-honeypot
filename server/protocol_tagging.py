@@ -6,8 +6,10 @@ No OTel, no logging, no I/O: callers wire the findings into spans and metrics.
 
 from __future__ import annotations
 
+import itertools
 import json
 import re
+import reprlib
 import typing
 from dataclasses import dataclass, field
 
@@ -52,29 +54,98 @@ FEATURE_METHODS: frozenset[str] = frozenset(
 )
 
 _MAX_DEPTH = 32
-_MAX_STRINGS = 10_000
+_MAX_NODES = 10_000
+_MAX_CAPS = 64
 _VERSION_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _FLAG_EMOJI_BASE = "\U0001f3f4"
-_OTHER_INVISIBLE = frozenset(
-    [0x200B, 0x200C, 0x200D, 0x2060, 0xFEFF]
+_INVISIBLE_CHARS = tuple(
+    chr(c)
+    for c in [0x200B, 0x200C, 0x200D, 0x2060, 0xFEFF]
     + list(range(0x202A, 0x202F))
     + list(range(0x2066, 0x206A))
 )
-# Fast pre-filter: only strings matching this need the per-character pass.
+# Fast pre-filter: only strings matching this need further work.
 _INTERESTING_RE = re.compile(
     "[\U000e0000-\U000e007f\x1b\x9b\u200b\u200c\u200d\u2060\ufeff\u202a-\u202e\u2066-\u2069]"
 )
+_ANSI_RE = re.compile("[\x1b\x9b]")
+# ESC followed by anything but "[", "]" or "\\" (ST), or at end of string.
+_ESC_OTHER_RE = re.compile("\x1b(?![\\[\\]\\\\])")
+_TAG_RUN_RE = re.compile("[\U000e0000-\U000e007f]+")
+_TAG_CHARS = tuple(chr(0xE0000 + i) for i in range(128))
+# The three RGI subdivision flag sequences: base + tag letters + cancel tag.
+_FLAG_SEQUENCE_RE = re.compile(
+    _FLAG_EMOJI_BASE
+    + "(?:"
+    + "|".join(
+        "".join(chr(0xE0000 + ord(c)) for c in code) + chr(0xE007F)
+        for code in ("gbeng", "gbsct", "gbwls")
+    )
+    + ")(?![\U000e0000-\U000e007f])"
+)
+
+
+class _BoundedRepr(reprlib.Repr):
+    """reprlib.Repr that never sorts or walks a whole container."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.maxlevel = 2
+        self.maxlist = self.maxtuple = self.maxset = self.maxfrozenset = 6
+        self.maxdict = 6
+        self.maxstring = 64
+        self.maxother = 64
+        self.maxlong = 40
+
+    def repr_dict(self, x, level):  # type: ignore[no-untyped-def]
+        if not x:
+            return "{}"
+        if level <= 0:
+            return "{...}"
+        parts = [
+            f"{self.repr1(k, level - 1)}: {self.repr1(v, level - 1)}"
+            for k, v in itertools.islice(x.items(), self.maxdict)
+        ]
+        tail = ", ..." if len(x) > self.maxdict else ""
+        return "{" + ", ".join(parts) + tail + "}"
+
+    def _repr_unordered(self, x, level, left, right):  # type: ignore[no-untyped-def]
+        if not x:
+            return f"{left}{right}"
+        if level <= 0:
+            return f"{left}...{right}"
+        parts = [self.repr1(e, level - 1) for e in itertools.islice(x, self.maxset)]
+        tail = ", ..." if len(x) > self.maxset else ""
+        return left + ", ".join(parts) + tail + right
+
+    def repr_set(self, x, level):  # type: ignore[no-untyped-def]
+        return self._repr_unordered(x, level, "{", "}")
+
+    def repr_frozenset(self, x, level):  # type: ignore[no-untyped-def]
+        return self._repr_unordered(x, level, "frozenset({", "})")
+
+
+_REPR = _BoundedRepr()
 
 
 def truncate(value: object, limit: int = MAX_ATTR_LEN) -> str:
-    """str(value), capped at `limit` chars with a suffix recording the original length."""
-    try:
-        text = str(value)
-    except Exception:  # hostile __str__ or recursion-depth blowups
-        text = f"<unprintable {type(value).__name__}>"
-    if len(text) > limit:
-        return f"{text[:limit]}...[truncated {len(text)}]"
-    return text
+    """Bounded text of `value`, capped at `limit` chars with the original length recorded.
+
+    Cost is O(limit) regardless of input size. Output is always UTF-8 encodable
+    (lone surrogates become backslash escapes).
+    """
+    if isinstance(value, str):
+        text = value[: limit + 1]
+        total = len(value)
+    else:
+        try:
+            text = _REPR.repr(value)
+        except Exception:  # hostile __repr__, huge ints (ValueError), recursion
+            text = f"<unprintable {type(value).__name__}>"
+        total = len(text)
+    if total > limit:
+        text = f"{text[:limit]}...[truncated {total}]"
+    return text.encode("utf-8", "backslashreplace").decode("utf-8")
 
 
 def message_kind(msg: dict) -> str:
@@ -105,7 +176,7 @@ class ProtocolFindings:
 class _ScanResult:
     unicode_path: str | None = None
     tag_count: int = 0
-    decoded: list[str] = field(default_factory=list)
+    decoded: str = ""
     other_invisible: int = 0
     ansi_path: str | None = None
     ansi_kinds: set[str] = field(default_factory=set)
@@ -115,80 +186,92 @@ class _ScanResult:
 def _scan_string(text: str, path: str, res: _ScanResult) -> None:
     if not _INTERESTING_RE.search(text):
         return
-    n = len(text)
-    i = 0
-    while i < n:
-        cp = ord(text[i])
-        if 0xE0000 <= cp <= 0xE007F:
-            j = i
-            while j < n and 0xE0000 <= ord(text[j]) <= 0xE007F:
-                j += 1
-            run = text[i:j]
-            benign = (
-                i > 0
-                and text[i - 1] == _FLAG_EMOJI_BASE
-                and len(run) >= 2
-                and ord(run[-1]) == 0xE007F
-                and all(0xE0020 <= ord(c) <= 0xE007E for c in run[:-1])
-            )
-            if not benign:
-                if res.unicode_path is None:
-                    res.unicode_path = path
-                res.tag_count += len(run)
-                res.decoded.extend(chr(ord(c) - 0xE0000) for c in run)
-            i = j
-            continue
-        if cp in _OTHER_INVISIBLE:
-            res.other_invisible += 1
-        elif cp == 0x1B:
-            if res.ansi_path is None:
-                res.ansi_path = path
-            nxt = text[i + 1] if i + 1 < n else ""
-            res.ansi_kinds.add("csi" if nxt == "[" else "osc" if nxt == "]" else "other")
-        elif cp == 0x9B:
-            if res.ansi_path is None:
-                res.ansi_path = path
+    # Tags: drop the benign flag sequences, then everything left is hostile.
+    rest = _FLAG_SEQUENCE_RE.sub("", text)
+    tag_count = sum(rest.count(c) for c in _TAG_CHARS)
+    if tag_count:
+        if res.unicode_path is None:
+            res.unicode_path = path
+        res.tag_count += tag_count
+        room = MAX_ATTR_LEN + 1 - len(res.decoded)
+        for run in _TAG_RUN_RE.finditer(rest):
+            if room <= 0:
+                break
+            chunk = run.group()[:room]
+            res.decoded += "".join(chr(ord(c) - 0xE0000) for c in chunk)
+            room -= len(chunk)
+    res.other_invisible += sum(text.count(c) for c in _INVISIBLE_CHARS)
+    if _ANSI_RE.search(text):
+        if res.ansi_path is None:
+            res.ansi_path = path
+        if "\x9b" in text or "\x1b[" in text:
             res.ansi_kinds.add("csi")
-        i += 1
+        if "\x1b]" in text:
+            res.ansi_kinds.add("osc")
+        if _ESC_OTHER_RE.search(text):
+            res.ansi_kinds.add("other")
 
 
 def _child_path(path: str, key: str) -> str:
+    key = key[:MAX_ATTR_LEN]
     return f"{path}.{key}" if path else key
 
 
 def _walk(msg: dict) -> _ScanResult:
-    """Iterative, bounded walk over keys and values (document order)."""
+    """Iterative walk over keys and values (document order), bounded by node count and depth.
+
+    Every container, key and scalar is a node. The stack never holds more entries
+    than the remaining node budget, so cost stays O(_MAX_NODES) for any input.
+    """
     res = _ScanResult()
     visited = 0
     stack: list[tuple[object, str, int]] = [(msg, "", 0)]
     while stack:
         obj, path, depth = stack.pop()
+        visited += 1
         if isinstance(obj, str):
-            if visited >= _MAX_STRINGS:
-                res.truncated = True
-                break
-            visited += 1
             _scan_string(obj, path, res)
-        elif isinstance(obj, dict):
+        elif isinstance(obj, (dict, list, tuple)):
             if depth >= _MAX_DEPTH:
                 res.truncated = True
                 continue
-            items = list(obj.items())
+            room = _MAX_NODES - visited - len(stack)
             children: list[tuple[object, str, int]] = []
-            for key, val in items:
-                if isinstance(key, str):
-                    children.append((key, _child_path(path, key), depth + 1))
-                    kpath = _child_path(path, key)
-                else:
-                    kpath = _child_path(path, str(key))
-                children.append((val, kpath, depth + 1))
+            if isinstance(obj, dict):
+                for key, val in obj.items():
+                    if room - len(children) < 2:
+                        res.truncated = True
+                        break
+                    kpath = _child_path(path, key if isinstance(key, str) else truncate(key, 64))
+                    if isinstance(key, str):
+                        children.append((key, kpath + "#key", depth + 1))
+                    else:
+                        children.append((None, kpath + "#key", depth + 1))
+                    children.append((val, kpath, depth + 1))
+            else:
+                for idx, val in enumerate(obj):
+                    if len(children) >= room:
+                        res.truncated = True
+                        break
+                    children.append((val, f"{path}[{idx}]", depth + 1))
             stack.extend(reversed(children))
-        elif isinstance(obj, (list, tuple)):
-            if depth >= _MAX_DEPTH:
-                res.truncated = True
-                continue
-            stack.extend(reversed([(v, f"{path}[{idx}]", depth + 1) for idx, v in enumerate(obj)]))
     return res
+
+
+def _shrink(obj: object, depth: int = 4) -> object:
+    """Bounded JSON-ish copy: at most 16 items per container, depth 4, strings capped."""
+    if isinstance(obj, str):
+        return obj[:MAX_ATTR_LEN]
+    if depth <= 0:
+        return truncate(obj, 32) if isinstance(obj, (dict, list, tuple, set, frozenset)) else obj
+    if isinstance(obj, dict):
+        return {
+            (k if isinstance(k, str) else truncate(k, 64))[:MAX_ATTR_LEN]: _shrink(v, depth - 1)
+            for k, v in itertools.islice(obj.items(), 16)
+        }
+    if isinstance(obj, (list, tuple)):
+        return [_shrink(v, depth - 1) for v in itertools.islice(obj, 16)]
+    return obj
 
 
 class ConnectionProtocolState:
@@ -221,7 +304,7 @@ class ConnectionProtocolState:
         method_str = method if isinstance(method, str) else None
 
         if has_method:
-            attrs["mcp.method.raw"] = truncate(method if method_str is not None else repr(method))
+            attrs["mcp.method.raw"] = truncate(method)
         if isinstance(msg, dict) and msg.get("id") is not None:
             attrs["mcp.jsonrpc.id"] = truncate(msg["id"])
 
@@ -241,7 +324,11 @@ class ConnectionProtocolState:
             self._features(method_str, out)
             if method_str == "initialize":
                 self._initialize(msg, out)
-        elif kind == "notification" and method_str == "notifications/initialized":
+        elif (
+            kind == "notification"
+            and method_str == "notifications/initialized"
+            and self._initialize_seen
+        ):
             self._initialized_seen = True
 
         self._scan(msg, out)
@@ -285,17 +372,21 @@ class ConnectionProtocolState:
             out.add_flag("protocol_version_anomaly")
         caps = params.get("capabilities")
         if isinstance(caps, dict):
-            attrs["mcp.client.capabilities"] = truncate(",".join(sorted(str(k) for k in caps)))
+            attrs["mcp.client.capabilities_count"] = len(caps)
+            subset = {k: caps[k] for k in itertools.islice(caps, _MAX_CAPS)}
+            attrs["mcp.client.capabilities"] = truncate(
+                ",".join(sorted(k if isinstance(k, str) else truncate(k, 64) for k in subset))
+            )
             try:
                 attrs["mcp.client.capabilities_json"] = truncate(
-                    json.dumps(caps, sort_keys=True, default=str)
+                    json.dumps(_shrink(subset), sort_keys=True, default=str)
                 )
             except Exception:
                 attrs["mcp.client.capabilities_json"] = "<unserializable>"
         info = params.get("clientInfo")
         if isinstance(info, dict):
-            attrs["mcp.client.info_extra_keys"] = sum(
-                1 for k in info if k not in ("name", "version")
+            attrs["mcp.client.info_extra_keys"] = len(info) - sum(
+                1 for k in ("name", "version") if k in info
             )
 
     @staticmethod
@@ -308,12 +399,15 @@ class ConnectionProtocolState:
             out.add_flag("hidden_unicode")
             attrs["mcp.unicode.field_path"] = truncate(res.unicode_path)
             attrs["mcp.unicode.tag_count"] = res.tag_count
-            attrs["mcp.unicode.decoded"] = truncate("".join(res.decoded))
+            decoded = res.decoded[:MAX_ATTR_LEN]
+            if res.tag_count > MAX_ATTR_LEN:
+                decoded += f"...[truncated {res.tag_count}]"
+            attrs["mcp.unicode.decoded"] = decoded
         if res.other_invisible > 0:
             attrs["mcp.unicode.other_invisible_count"] = res.other_invisible
         if res.ansi_path is not None:
             out.add_flag("ansi_escape")
             attrs["mcp.ansi.field_path"] = truncate(res.ansi_path)
-            attrs["mcp.ansi.sequence_kinds"] = ",".join(sorted(res.ansi_kinds))
+            attrs["mcp.ansi.sequence_kinds"] = ",".join(sorted(res.ansi_kinds or {"other"}))
         if res.truncated:
             attrs["mcp.scan.truncated"] = 1

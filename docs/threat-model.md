@@ -139,6 +139,7 @@ Span names come from a fixed vocabulary: `mcp.<known method>`, `mcp.unknown_meth
 to 256 characters with a `...[truncated N]` suffix and appear only on span attributes
 and logs, never as metric labels. `mcp_anomalies_total` counts these flags under the
 same `flag` label as the tool-level flags.
+Messages larger than the scan bound are not fully scanned; `mcp.scan.truncated=1` marks them, and such messages are themselves anomalous for MCP traffic.
 
 ## Research Questions
 - Do agents have consistent fingerprints across sessions?

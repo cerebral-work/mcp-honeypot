@@ -205,9 +205,12 @@ Conventions for all flags:
   content by definition, so every hit is hostile-presumed. The decoded text is data,
   never instructions to be followed.
 - False positives: emoji tag sequences (flag subdivisions, for example the England
-  flag) use U+E0062..U+E007F tags legitimately. Mitigation: only flag when the decoded
-  tag run is not a well-formed emoji tag sequence (starts with U+1F3F4 and ends with
-  U+E007F); test pins this.
+  flag) use U+E0062..U+E007F tags legitimately. Mitigation: a tag run is benign only when
+  U+1F3F4 immediately precedes it and the run is exactly one of the three RGI subdivision
+  flag sequences (`gbeng`, `gbsct`, `gbwls` as tag letters, then U+E007F); every other run
+  is flagged and decoded; test pins this. Hits in a dict key report `field_path`
+  `<holder path>.<key>#key`. The scan visits at most 10,000 nodes (containers, keys and
+  scalars) and 32 levels. Messages larger than the scan bound are not fully scanned; `mcp.scan.truncated=1` marks them, and such messages are themselves anomalous for MCP traffic.
 - Tests: string with `chr(0xE0041)` flagged with decoded `A`; flag-emoji tag sequence
   not flagged (negative); nested in `params.arguments.a.b[0]` flagged with correct path;
   clean ASCII not flagged.
@@ -221,7 +224,8 @@ Conventions for all flags:
   vocabulary), not the raw bytes as a metric label.
 - False positives: terminal-pasted logs in tool arguments legitimately contain colour
   codes. The flag is informational; OSC 8 hyperlinks (`ESC ] 8`) are the stronger
-  sub-signal and get `sequence_kinds=osc`.
+  sub-signal and get `sequence_kinds=osc`. The string terminator ESC `\` is not a separate
+  kind. Hits in a dict key report `field_path` `<holder path>.<key>#key`. Messages larger than the scan bound are not fully scanned; `mcp.scan.truncated=1` marks them, and such messages are themselves anomalous for MCP traffic.
 - Tests: `"\x1b[31mred"` flagged `csi`; `"\x1b]8;;http://x\x1b\\t"` flagged `osc`;
   plain text with a literal backslash-x-1-b (four characters, not ESC) not flagged
   (negative).

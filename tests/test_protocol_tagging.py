@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import time
 import typing
 from pathlib import Path
 
@@ -354,7 +355,7 @@ class TestD6Ansi:
 
     def test_osc_8_hyperlink(self):
         f = self.kinds("\x1b]8;;http://x\x1b\\t")
-        assert f.attributes["mcp.ansi.sequence_kinds"] == "osc,other"
+        assert f.attributes["mcp.ansi.sequence_kinds"] == "osc"
 
     def test_osc_only(self):
         f = self.kinds("\x1b]0;title")
@@ -375,7 +376,7 @@ class TestD6Ansi:
 
     def test_mixed_sorted(self):
         f = self.kinds("\x1b[1m\x1b]8;;u\x1b\\")
-        assert f.attributes["mcp.ansi.sequence_kinds"] == "csi,osc,other"
+        assert f.attributes["mcp.ansi.sequence_kinds"] == "csi,osc"
 
     def test_literal_backslash_x1b_not_flagged(self):
         f = self.kinds("\\x1b[31m")
@@ -491,3 +492,102 @@ class TestInvariants:
         }
         assert flags == PROTOCOL_FLAGS
         assert {"request", "notification", "response", "error", "unknown"} == MESSAGE_KINDS
+
+
+def tagged(text):
+    return "".join(chr(0xE0000 + ord(c)) for c in text)
+
+
+class TestHardening:
+    def test_flag_base_with_arbitrary_tag_payload_flagged(self):
+        s = "\U0001f3f4" + tagged("ignore all") + chr(0xE007F)
+        f = one(req("tools/call", params={"arguments": {"q": s}}))
+        assert "hidden_unicode" in f.flags
+        assert f.attributes["mcp.unicode.decoded"].startswith("ignore all")
+
+    def test_all_three_subdivision_flags_benign(self):
+        for code in ("gbeng", "gbsct", "gbwls"):
+            s = "x\U0001f3f4" + tagged(code) + chr(0xE007F) + "y"
+            f = one(req("tools/call", params={"arguments": {"q": s}}))
+            assert "hidden_unicode" not in f.flags, code
+
+    def test_other_subdivision_flagged(self):
+        s = "\U0001f3f4" + tagged("usca") + chr(0xE007F)
+        f = one(req("tools/call", params={"arguments": {"q": s}}))
+        assert "hidden_unicode" in f.flags
+
+    def test_depth_33_esc_sets_truncated_attr(self):
+        x: dict = {"k": "\x1b[31m"}
+        for _ in range(40):
+            x = {"a": x}
+        f = one(req("tools/call", params=x))
+        assert f.attributes["mcp.scan.truncated"] == 1
+
+    def test_10001_node_padding_sets_truncated_attr(self):
+        f = one(req("tools/call", params={"a": ["x"] * 10_001}))
+        assert f.attributes["mcp.scan.truncated"] == 1
+
+    def test_empty_container_padding_counts_nodes(self):
+        f = one(req("tools/call", params={"a": [[]] * 20_000}))
+        assert f.attributes["mcp.scan.truncated"] == 1
+
+    def test_truncate_huge_int_and_container(self):
+        assert truncate(10**100000) == "<unprintable int>"
+        assert len(truncate([1] * 1000)) < 400
+        assert len(truncate({str(i): i for i in range(1000)})) < 400
+
+    def test_truncate_lone_surrogate_encodable(self):
+        out = truncate("\ud800")
+        out.encode("utf-8")
+        assert "\\ud800" in out
+
+    def test_capabilities_bounded_and_counted(self):
+        caps = {str(i): 1 for i in range(1000)}
+        f = ConnectionProtocolState().inspect(init(capabilities=caps))
+        assert f.attributes["mcp.client.capabilities_count"] == 1000
+        assert isinstance(f.attributes["mcp.client.capabilities_count"], int)
+
+    def test_initialized_before_initialize_does_not_count(self):
+        st = ConnectionProtocolState()
+        st.inspect(note("notifications/initialized"))
+        st.inspect(init())
+        f = st.inspect(req("tools/call"))
+        assert "lifecycle_violation" in f.flags
+        assert f.attributes["mcp.lifecycle.reason"] == "no_initialized_notification"
+
+    def test_osc_string_terminator_not_other(self):
+        f = one(req("tools/call", params={"a": "\x1b]8;;http://x\x1b\\t"}))
+        assert f.attributes["mcp.ansi.sequence_kinds"] == "osc"
+
+    def test_key_hit_marked(self):
+        f = one(req("tools/call", params={"arguments": {"k\x1b[0m": 1}}))
+        assert f.attributes["mcp.ansi.field_path"] == "params.arguments.k\x1b[0m#key"
+        f = one(req("tools/call", params={"arguments": {"k": "\x1b[0m"}}))
+        assert f.attributes["mcp.ansi.field_path"] == "params.arguments.k"
+
+    def test_surrogate_attrs_encodable(self):
+        f = one({"id": "\ud800", "method": "\ud800x"})
+        for v in f.attributes.values():
+            if isinstance(v, str):
+                v.encode("utf-8")
+
+
+class TestPerformance:
+    @staticmethod
+    def timed(msg):
+        st = ConnectionProtocolState()
+        t = time.perf_counter()
+        st.inspect(msg)
+        return time.perf_counter() - t
+
+    def test_hostile_inputs_fast(self):
+        big_caps = {str(i): 1 for i in range(1_000_000)}
+        cases = {
+            "empty lists": req("tools/call", params={"a": [[]] * 1_000_000}),
+            "id list": {"id": [1] * 2_000_000, "method": "ping"},
+            "caps": init(capabilities=big_caps),
+            "zwsp": req("tools/call", params={"a": "\u200b" * 1_000_000}),
+            "tags": req("tools/call", params={"a": ("a" + chr(0xE0041)) * 500_000}),
+        }
+        for name, msg in cases.items():
+            assert self.timed(msg) < 0.1, name
