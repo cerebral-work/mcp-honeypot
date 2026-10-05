@@ -18,11 +18,13 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import anyio
+import instrumentation
 from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 from config import settings
 from instrumentation import get_tracer
 from logging_config import get_logger, session_id_var
 from opentelemetry.trace import StatusCode
+from protocol_tagging import ConnectionProtocolState, truncate
 
 logger = get_logger(__name__)
 tracer = get_tracer("mcp-honeypot.transport")
@@ -99,6 +101,10 @@ class InstrumentedTransport:
         self._agent_id: str = _extract_agent_from_user_agent(headers) or self.session_id
         self._agent_id_refined: bool = False
 
+        # Per-connection protocol state for the MCP-native detections
+        # (docs/spec-mcp-native-detections.md, D1-D6). Dies with the connection.
+        self._protocol = ConnectionProtocolState()
+
     @property
     def agent_id(self) -> str:
         return self._agent_id
@@ -164,6 +170,11 @@ class InstrumentedTransport:
         method = msg_dict.get("method", method)
         message_size = len(json.dumps(msg_dict, default=str))
 
+        # MCP-native protocol detections. Pure and never raises; the span name
+        # comes from a fixed vocabulary so attacker-chosen methods cannot mint
+        # new span names (spec section 3.1).
+        findings = self._protocol.inspect(msg_dict)
+
         # Refine agent ID from the ``initialize`` message if not yet done.
         if method == "initialize" and not self._agent_id_refined:
             agent = _extract_agent_from_initialize(msg_dict)
@@ -176,21 +187,37 @@ class InstrumentedTransport:
 
         # Create a span (immediately ended — handlers create their own
         # child spans for tool execution).
-        with tracer.start_as_current_span(
-            f"mcp.{method}",
-            attributes={
-                "agent.id": self._agent_id,
-                "mcp.method": method,
-                "mcp.session_id": self.session_id,
-                "honeypot.phase": settings.honeypot_phase,
-                "mcp.message_size": message_size,
-            },
-        ) as span:
+        attributes: dict[str, Any] = {
+            "agent.id": self._agent_id,
+            "mcp.method": truncate(method),
+            "mcp.session_id": self.session_id,
+            "honeypot.phase": settings.honeypot_phase,
+            "mcp.message_size": message_size,
+            "anomaly.flags": ",".join(findings.flags),
+        }
+        attributes.update(findings.attributes)
+
+        with tracer.start_as_current_span(findings.span_name, attributes=attributes) as span:
             span.set_status(StatusCode.OK)
+
+        # Label values are the fixed flag vocabulary only. Read the counter
+        # through the module at call time: it is assigned by setup_telemetry().
+        counter = instrumentation.mcp_anomalies_total
+        if counter is not None:
+            for flag in findings.flags:
+                counter.add(1, {"flag": flag})
+
+        if findings.flags:
+            logger.info(
+                "mcp_protocol_anomaly",
+                flags=findings.flags,
+                method=truncate(method),
+                agent_id=self._agent_id,
+            )
 
         logger.debug(
             "mcp_message_received",
-            method=method,
+            method=truncate(method),
             agent_id=self._agent_id,
             message_size=message_size,
         )

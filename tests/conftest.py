@@ -5,7 +5,13 @@ import pytest
 collect_ignore_glob = ["smoke_test_standalone.py"]
 
 # Auto-assign markers based on test file name
-_UNIT_FILES = {"test_tagging", "test_config", "test_registry", "test_fake_responses"}
+_UNIT_FILES = {
+    "test_tagging",
+    "test_protocol_tagging",
+    "test_config",
+    "test_registry",
+    "test_fake_responses",
+}
 _MODULE_FILES = {
     "test_handlers",
     "test_transport_wrapper",
@@ -13,6 +19,7 @@ _MODULE_FILES = {
     "test_main",
     "test_integration",
     "test_sse_session",
+    "test_protocol_wiring",
 }
 _TOOL_FILES = {"test_adversarial_agent", "test_export", "test_harness"}
 _INTEGRATION_FILES = {"test_fingerprinting"}
@@ -31,3 +38,29 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             item.add_marker(pytest.mark.tools)
         elif module_name in _INTEGRATION_FILES:
             item.add_marker(pytest.mark.integration)
+
+
+@pytest.fixture
+def span_exporter():
+    """Capture finished spans in memory for the duration of one test.
+
+    Attaches an in-memory exporter to the global SDK tracer provider,
+    installing one if the process has none yet. Processors cannot be
+    detached, so the exporter is shut down afterwards and simply drops
+    later spans.
+    """
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    provider = trace.get_tracer_provider()
+    if not isinstance(provider, TracerProvider):
+        provider = TracerProvider()
+        trace.set_tracer_provider(provider)
+    exporter = InMemorySpanExporter()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    yield exporter
+    exporter.shutdown()

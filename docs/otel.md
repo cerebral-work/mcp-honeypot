@@ -67,6 +67,25 @@
 | mcp.session_id | Session identifier |
 | honeypot.phase | research / public |
 
+### Message Spans (protocol layer)
+Span name is `mcp.<known method>`, `mcp.unknown_method`, `mcp.response`, `mcp.error`
+or `mcp.unknown`; attacker-chosen methods never become span names.
+
+| Tag | Description |
+|-----|-------------|
+| mcp.message_kind | request / notification / response / error / unknown |
+| mcp.method.raw | Method as sent, truncated to 256 characters |
+| mcp.jsonrpc.id | JSON-RPC id, truncated |
+| mcp.message_size | Serialized size of the message |
+| anomaly.flags | Comma-separated protocol flags (see threat-model.md) |
+| mcp.client.protocol_version | `initialize` protocolVersion as sent |
+| mcp.client.capabilities | Sorted capability keys from `initialize` |
+| mcp.client.capabilities_json | Capabilities as JSON, truncated |
+| mcp.lifecycle.reason | no_initialize / no_initialized_notification |
+| mcp.feature_methods | Feature-list methods seen when feature_enumeration fired |
+| mcp.unicode.field_path, mcp.unicode.tag_count, mcp.unicode.decoded, mcp.unicode.other_invisible_count | hidden_unicode details |
+| mcp.ansi.field_path, mcp.ansi.sequence_kinds | ansi_escape details |
+
 ### Tool Spans
 | Tag | Description |
 |-----|-------------|
