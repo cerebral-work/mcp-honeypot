@@ -29,8 +29,9 @@ from mcp.server.sse import SseServerTransport
 from mcp.types import TextContent, Tool
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.routing import Route
+from starlette.types import Receive, Scope, Send
 
 setup_logging()
 
@@ -40,7 +41,7 @@ from instrumentation import get_tracer, setup_telemetry  # noqa: E402
 setup_telemetry()
 
 from config import settings  # noqa: E402
-from middleware import add_middleware, limiter, sse_limit  # noqa: E402
+from middleware import add_middleware, allow_message, limiter, sse_limit  # noqa: E402
 from tools.handlers import dispatch  # noqa: E402
 from tools.registry import TOOL_REGISTRY  # noqa: E402
 from transport_wrapper import InstrumentedTransport  # noqa: E402
@@ -155,13 +156,32 @@ async def handle_sse(request: Request) -> None:
     )
 
 
-async def handle_messages(request: Request) -> None:
-    """``POST /messages`` — forward SSE messages to the transport."""
-    await sse_transport.handle_post_message(
-        request.scope,
-        request.receive,
-        request._send,  # noqa: SLF001
-    )
+class _PostMessages:
+    """``POST /messages`` — hand the raw ASGI call to the SSE transport.
+
+    The SDK's ``handle_post_message`` writes the HTTP response itself. As a
+    plain request function it returned ``None`` afterwards, and Starlette
+    then called that ``None`` as the response: every POST logged "Exception
+    in ASGI application" after the client already had its answer. Starlette
+    treats a non-function endpoint as a raw ASGI app, so no second response
+    is attempted.
+    """
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        allowed, client_ip = allow_message(scope)
+        if not allowed:
+            # Its own signal: a client pushing past the per-IP message rate.
+            logger.warning(
+                "messages_rate_limited",
+                client_ip=client_ip,
+                limit=settings.messages_rate_limit,
+            )
+            await PlainTextResponse("rate limit exceeded", status_code=429)(scope, receive, send)
+            return
+        await sse_transport.handle_post_message(scope, receive, send)
+
+
+handle_messages = _PostMessages()
 
 
 # ---------------------------------------------------------------------------

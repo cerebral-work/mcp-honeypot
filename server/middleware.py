@@ -13,6 +13,10 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from config import settings
+from limits import parse as parse_rate
+from limits.storage import MemoryStorage
+from limits.strategies import MovingWindowRateLimiter
 from logging_config import get_logger
 from opentelemetry import trace
 from slowapi import Limiter
@@ -21,8 +25,8 @@ from slowapi.util import get_remote_address
 from starlette.applications import Starlette
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.responses import PlainTextResponse, Response
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 log = get_logger(__name__)
 
@@ -151,6 +155,103 @@ class SecurityHeadersMiddleware:
 
 
 # ---------------------------------------------------------------------------
+# POST /messages rate limit (TOD-1056)
+# ---------------------------------------------------------------------------
+
+# Every JSON-RPC message of an MCP session is one POST /messages, and the
+# rapid_enumeration flag fires above 10 calls in 5 s (~120/min). The limit is
+# per client IP and deliberately generous (default 600/min) so floods are
+# bounded without suppressing the bursts the honeypot exists to record.
+messages_rate_limiter = MovingWindowRateLimiter(MemoryStorage())
+messages_rate_item = parse_rate(settings.messages_rate_limit)
+
+
+def allow_message(scope: Scope) -> tuple[bool, str]:
+    """Count one POST /messages for the caller; return (allowed, client_ip)."""
+    client_ip = _client_ip(Request(scope))
+    return messages_rate_limiter.hit(messages_rate_item, "messages", client_ip), client_ip
+
+
+# ---------------------------------------------------------------------------
+# Request body size limit (TOD-1056)
+# ---------------------------------------------------------------------------
+
+_BODY_METHODS = frozenset({"POST", "PUT", "PATCH"})
+
+
+class BodySizeLimitMiddleware:
+    """Refuse request bodies larger than ``max_bytes`` with 413.
+
+    ``POST /messages`` carries every JSON-RPC message of an MCP session and
+    had no size cap, so one client could make the server parse and serialize
+    arbitrarily large payloads. A declared ``Content-Length`` over the limit
+    is refused before any body is read; a chunked body is counted as it
+    arrives and refused once it crosses the limit. Accepted bodies are
+    buffered (at most ``max_bytes``) and replayed to the app unchanged.
+    """
+
+    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def _refuse(self, scope: Scope, receive: Receive, send: Send, size: int) -> None:
+        client = scope.get("client") or ("unknown", 0)
+        log.warning(
+            "request_body_too_large",
+            path=scope.get("path", ""),
+            client_ip=client[0],
+            size=size,
+            limit=self.max_bytes,
+        )
+        response = PlainTextResponse("request body too large", status_code=413)
+        await response(scope, receive, send)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope.get("method") not in _BODY_METHODS:
+            await self.app(scope, receive, send)
+            return
+
+        for name, value in scope.get("headers", []):
+            if name == b"content-length":
+                try:
+                    declared = int(value)
+                except ValueError:
+                    break
+                if declared > self.max_bytes:
+                    await self._refuse(scope, receive, send, declared)
+                    return
+                break
+
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            message = await receive()
+            if message["type"] != "http.request":
+                # Client went away mid-body: nothing to serve.
+                return
+            body = message.get("body", b"")
+            total += len(body)
+            if total > self.max_bytes:
+                await self._refuse(scope, receive, send, total)
+                return
+            chunks.append(body)
+            if not message.get("more_body", False):
+                break
+
+        buffered = b"".join(chunks)
+        replayed = False
+
+        async def replay() -> Message:
+            nonlocal replayed
+            if not replayed:
+                replayed = True
+                return {"type": "http.request", "body": buffered, "more_body": False}
+            return await receive()
+
+        await self.app(scope, replay, send)
+
+
+# ---------------------------------------------------------------------------
 # Public integration point
 # ---------------------------------------------------------------------------
 
@@ -164,6 +265,9 @@ def add_middleware(app: Starlette) -> None:
     # -- slowapi ---------------------------------------------------------
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded)  # type: ignore[arg-type]
+
+    # -- Body size limit (TOD-1056) --------------------------------------
+    app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_body_bytes)  # type: ignore[arg-type]
 
     # -- Security headers ------------------------------------------------
     app.add_middleware(SecurityHeadersMiddleware)  # type: ignore[arg-type]
@@ -185,7 +289,8 @@ def add_middleware(app: Starlette) -> None:
 
     log.info(
         "middleware_configured",
-        rate_limit_global="60/minute",
         rate_limit_sse="10/minute",
+        rate_limit_messages=settings.messages_rate_limit,
+        max_body_bytes=settings.max_body_bytes,
         cors_origins=allow_origins,
     )
