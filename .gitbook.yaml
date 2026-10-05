@@ -1,0 +1,7 @@
+# GitHub -> GitBook only; the first sync must be GitHub -> GitBook (the
+# reverse empties this repo's content). Space pgRDYRfN7H1lc1RYvFyq.
+root: ./docs/
+
+structure:
+  readme: vision.md
+  summary: SUMMARY.md
