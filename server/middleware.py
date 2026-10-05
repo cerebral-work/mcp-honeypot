@@ -14,6 +14,9 @@ import os
 from typing import Any
 
 from config import settings
+from limits import parse as parse_rate
+from limits.storage import MemoryStorage
+from limits.strategies import MovingWindowRateLimiter
 from logging_config import get_logger
 from opentelemetry import trace
 from slowapi import Limiter
@@ -152,6 +155,24 @@ class SecurityHeadersMiddleware:
 
 
 # ---------------------------------------------------------------------------
+# POST /messages rate limit (TOD-1056)
+# ---------------------------------------------------------------------------
+
+# Every JSON-RPC message of an MCP session is one POST /messages, and the
+# rapid_enumeration flag fires above 10 calls in 5 s (~120/min). The limit is
+# per client IP and deliberately generous (default 600/min) so floods are
+# bounded without suppressing the bursts the honeypot exists to record.
+messages_rate_limiter = MovingWindowRateLimiter(MemoryStorage())
+messages_rate_item = parse_rate(settings.messages_rate_limit)
+
+
+def allow_message(scope: Scope) -> tuple[bool, str]:
+    """Count one POST /messages for the caller; return (allowed, client_ip)."""
+    client_ip = _client_ip(Request(scope))
+    return messages_rate_limiter.hit(messages_rate_item, "messages", client_ip), client_ip
+
+
+# ---------------------------------------------------------------------------
 # Request body size limit (TOD-1056)
 # ---------------------------------------------------------------------------
 
@@ -268,7 +289,8 @@ def add_middleware(app: Starlette) -> None:
 
     log.info(
         "middleware_configured",
-        rate_limit_global="60/minute",
         rate_limit_sse="10/minute",
+        rate_limit_messages=settings.messages_rate_limit,
+        max_body_bytes=settings.max_body_bytes,
         cors_origins=allow_origins,
     )

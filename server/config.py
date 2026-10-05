@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from limits import parse as _parse_rate
+
 
 def _get(key: str, default: str) -> str:
     return os.environ.get(key, default).strip() or default
@@ -48,8 +50,10 @@ class Settings:
     # Logging
     log_level: str
 
-    # Request limits (TOD-1056): largest accepted request body in bytes.
+    # Request limits (TOD-1056): largest accepted request body in bytes, and
+    # the per-client-IP rate for POST /messages (a `limits` rate string).
     max_body_bytes: int = 1_048_576
+    messages_rate_limit: str = "600/minute"
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -71,6 +75,14 @@ class Settings:
         if max_body_bytes < 1024:
             raise ValueError(f"MAX_REQUEST_BODY_BYTES must be >= 1024, got {max_body_bytes}")
 
+        messages_rate_limit = _get("MESSAGES_RATE_LIMIT", "600/minute")
+        try:
+            _parse_rate(messages_rate_limit)
+        except ValueError as exc:
+            raise ValueError(
+                f"MESSAGES_RATE_LIMIT must be a rate like '600/minute', got {messages_rate_limit!r}"
+            ) from exc
+
         # Required in public phase: agents need a shared secret to authenticate
         # health-check webhooks. Not needed in research phase.
         webhook_secret: str | None = None
@@ -87,6 +99,7 @@ class Settings:
             otlp_insecure=os.environ.get("OTLP_INSECURE", "true").lower() != "false",
             log_level=log_level,
             max_body_bytes=max_body_bytes,
+            messages_rate_limit=messages_rate_limit,
         )
 
 

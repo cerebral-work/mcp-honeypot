@@ -21,6 +21,7 @@ _MODULE_FILES = {
     "test_sse_session",
     "test_protocol_wiring",
     "test_body_limit",
+    "test_messages_rate_limit",
 }
 _TOOL_FILES = {"test_adversarial_agent", "test_export", "test_harness"}
 _INTEGRATION_FILES = {"test_fingerprinting"}

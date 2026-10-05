@@ -43,7 +43,8 @@ Starts as self-hosted research, evolves into standalone product.
 
 ## Env Vars (config.py reads these)
 `OTLP_ENDPOINT`, `OTLP_INSECURE`, `SERVICE_NAME`, `MCP_HOST`, `MCP_PORT`,
-`HONEYPOT_PHASE`, `LOG_LEVEL`, `HONEYPOT_WEBHOOK_SECRET` (public phase only)
+`HONEYPOT_PHASE`, `LOG_LEVEL`, `HONEYPOT_WEBHOOK_SECRET` (public phase only),
+`MAX_REQUEST_BODY_BYTES` (default 1 MiB), `MESSAGES_RATE_LIMIT` (default `600/minute` per client IP)
 
 ## Scripts & Make
 - `make help` — show all 20 targets

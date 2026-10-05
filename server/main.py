@@ -29,7 +29,7 @@ from mcp.server.sse import SseServerTransport
 from mcp.types import TextContent, Tool
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.routing import Route
 from starlette.types import Receive, Scope, Send
 
@@ -41,7 +41,7 @@ from instrumentation import get_tracer, setup_telemetry  # noqa: E402
 setup_telemetry()
 
 from config import settings  # noqa: E402
-from middleware import add_middleware, limiter, sse_limit  # noqa: E402
+from middleware import add_middleware, allow_message, limiter, sse_limit  # noqa: E402
 from tools.handlers import dispatch  # noqa: E402
 from tools.registry import TOOL_REGISTRY  # noqa: E402
 from transport_wrapper import InstrumentedTransport  # noqa: E402
@@ -168,6 +168,16 @@ class _PostMessages:
     """
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        allowed, client_ip = allow_message(scope)
+        if not allowed:
+            # Its own signal: a client pushing past the per-IP message rate.
+            logger.warning(
+                "messages_rate_limited",
+                client_ip=client_ip,
+                limit=settings.messages_rate_limit,
+            )
+            await PlainTextResponse("rate limit exceeded", status_code=429)(scope, receive, send)
+            return
         await sse_transport.handle_post_message(scope, receive, send)
 
 
