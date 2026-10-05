@@ -48,6 +48,9 @@ class Settings:
     # Logging
     log_level: str
 
+    # Request limits (TOD-1056): largest accepted request body in bytes.
+    max_body_bytes: int = 1_048_576
+
     @classmethod
     def from_env(cls) -> Settings:
         honeypot_phase = _get("HONEYPOT_PHASE", "research")
@@ -64,6 +67,10 @@ class Settings:
         if not (1 <= mcp_port <= 65535):
             raise ValueError(f"MCP_PORT must be 1–65535, got {mcp_port}")
 
+        max_body_bytes = _get_int("MAX_REQUEST_BODY_BYTES", 1_048_576)
+        if max_body_bytes < 1024:
+            raise ValueError(f"MAX_REQUEST_BODY_BYTES must be >= 1024, got {max_body_bytes}")
+
         # Required in public phase: agents need a shared secret to authenticate
         # health-check webhooks. Not needed in research phase.
         webhook_secret: str | None = None
@@ -79,6 +86,7 @@ class Settings:
             otlp_endpoint=_get("OTLP_ENDPOINT", "otel-collector:4317"),
             otlp_insecure=os.environ.get("OTLP_INSECURE", "true").lower() != "false",
             log_level=log_level,
+            max_body_bytes=max_body_bytes,
         )
 
 

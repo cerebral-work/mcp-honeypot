@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Request body size cap (`MAX_REQUEST_BODY_BYTES`, default 1 MiB): larger bodies get 413 before the SDK parses them (TOD-1056)
 - MCP-native protocol detections (spec P1): `unknown_method`, `lifecycle_violation`, `feature_enumeration`, `protocol_version_anomaly`, `hidden_unicode` and `ansi_escape` on every inbound message span, counted in `mcp_anomalies_total`
 - Message spans record `mcp.message_kind`, `mcp.jsonrpc.id`, the client's `protocolVersion` and capability keys
 - Regression tests for adversarial agent, export tool, and test harness (+96 tests)
@@ -24,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI now lints tools/ and examples/
 
 ### Fixed
+- `POST /messages` no longer raises "Exception in ASGI application" after the SDK has replied
 - docs/threat-model.md: updated to match SHA-256 + TTL implementation
 - docs/storage.md: Badger env vars, root user, CLI retention flags
 - docs/mcp-server.md: Starlette not FastAPI, correct env var names
