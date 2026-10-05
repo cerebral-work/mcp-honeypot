@@ -117,6 +117,29 @@ Sessions are evicted after 1 hour of inactivity (`SESSION_EVICT_SECONDS = 3600`)
 | EXFIL_TTL_SECONDS | 300.0 | Read-to-network chain window |
 | SESSION_EVICT_SECONDS | 3600.0 | Idle session eviction threshold |
 
+## Protocol-Level Detections (protocol_tagging.py)
+
+The seven flags above are tool-level and generic to any API. These six are
+specific to the Model Context Protocol and run on every inbound JSON-RPC
+message in `InstrumentedTransport`, before the SDK sees it. They never change
+a response. Full design, sources and rulings: [spec-mcp-native-detections.md](spec-mcp-native-detections.md).
+
+| Flag | Fires when | Main span attributes |
+|------|------------|----------------------|
+| `unknown_method` | The method is outside the pinned SDK's client request and notification union. On `mcp==1.6.0` such a request also ends the SSE connection. | `mcp.method.raw` |
+| `lifecycle_violation` | A request other than `initialize` or `ping` arrives before `initialize` (`no_initialize`), or `tools/call` arrives before `notifications/initialized` (`no_initialized_notification`). | `mcp.lifecycle.reason` |
+| `feature_enumeration` | A connection requests a second distinct feature-list method (`resources/list`, `resources/templates/list`, `prompts/list`, `completion/complete`, `logging/setLevel`). Fires once per connection. | `mcp.feature_methods` |
+| `protocol_version_anomaly` | `initialize.params.protocolVersion` is missing, not a string, longer than 32 characters, not `YYYY-MM-DD`, or not a known revision. | `mcp.client.protocol_version`, `mcp.client.capabilities` |
+| `hidden_unicode` | Any string in the message carries Unicode Tags (U+E0000..U+E007F) outside a well-formed emoji tag sequence. Zero-width and bidi characters are counted, not flagged. | `mcp.unicode.field_path`, `mcp.unicode.decoded`, `mcp.unicode.other_invisible_count` |
+| `ansi_escape` | Any string in the message contains ESC or C1 CSI. | `mcp.ansi.field_path`, `mcp.ansi.sequence_kinds` |
+
+Every message span also carries `mcp.message_kind` and, for requests, `mcp.jsonrpc.id`.
+Span names come from a fixed vocabulary: `mcp.<known method>`, `mcp.unknown_method`,
+`mcp.response`, `mcp.error` or `mcp.unknown`. Attacker-supplied strings are truncated
+to 256 characters with a `...[truncated N]` suffix and appear only on span attributes
+and logs, never as metric labels. `mcp_anomalies_total` counts these flags under the
+same `flag` label as the tool-level flags.
+
 ## Research Questions
 - Do agents have consistent fingerprints across sessions?
 - What tool enumeration order is characteristic of different frameworks (LangChain, CrewAI, AutoGen)?

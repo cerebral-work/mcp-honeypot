@@ -31,12 +31,15 @@ Wraps MCP transport. Every inbound message creates a root span.
     class InstrumentedTransport:
         def _instrument_message(self, message):
             # Extract method from JSONRPCMessage → msg_dict
-            with tracer.start_as_current_span(f"mcp.{method}") as span:
+            findings = self._protocol.inspect(msg_dict)   # protocol_tagging.py, D1-D6
+            with tracer.start_as_current_span(findings.span_name) as span:
                 span.set_attribute("agent.id", self._agent_id)
                 span.set_attribute("mcp.method", method)
                 span.set_attribute("mcp.session_id", self.session_id)
                 span.set_attribute("honeypot.phase", settings.honeypot_phase)
                 span.set_attribute("mcp.message_size", message_size)
+                span.set_attribute("anomaly.flags", ",".join(findings.flags))
+                # plus findings.attributes; see otel.md "Message Spans"
                 span.set_status(StatusCode.OK)
 
 ## Tool Layer

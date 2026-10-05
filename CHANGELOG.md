@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- MCP-native protocol detections (spec P1): `unknown_method`, `lifecycle_violation`, `feature_enumeration`, `protocol_version_anomaly`, `hidden_unicode` and `ansi_escape` on every inbound message span, counted in `mcp_anomalies_total`
+- Message spans record `mcp.message_kind`, `mcp.jsonrpc.id`, the client's `protocolVersion` and capability keys
 - Regression tests for adversarial agent, export tool, and test harness (+96 tests)
 - Sessions active gauge metric (mcp_sessions_active)
 - Grafana alert notification routing (webhook contact points)

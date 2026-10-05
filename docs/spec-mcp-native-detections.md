@@ -1,6 +1,6 @@
 # Spec: MCP-Native Detections
 
-Status: design ruled by the operator 2026-10-04 (section 6); implementation pending. Branch `feat/mcp-native-detections`, based on
+Status: design ruled by the operator 2026-10-04 (section 6). P1 (D1-D6) implemented on this branch. Branch `feat/mcp-native-detections`, based on
 `a511ad4`. No code changes accompany this document.
 
 Citations: `file:line` refers to the tree at `a511ad4`. "survey §N" refers to the
@@ -145,22 +145,26 @@ Conventions for all flags:
 
 ### D3. `feature_enumeration`
 
-- Signal: within one connection, requests to two or more distinct feature-list methods
-  from `{resources/list, resources/templates/list, prompts/list, completion/complete,
-  logging/setLevel}` in addition to `tools/list`, or any one of them within a configured
-  window (default 10 s) of `initialize`. These nine methods validate but are unhandled
-  and return -32601 (per gaps §2), which is a clean probe signal (survey §15).
+- Signal: within one connection, requests to two distinct feature-list methods from
+  `{resources/list, resources/templates/list, prompts/list, completion/complete,
+  logging/setLevel}`. `tools/list` does not count. The flag fires once, on the message
+  that brings the set to two, and records the set in `mcp.feature_methods`. These
+  methods validate but are unhandled and return -32601 (per gaps §2), which is a clean
+  probe signal (survey §15).
+- Amended during P1 (2026-10-04): the first draft also fired on any one feature method
+  within 10 s of `initialize`. That contradicted this section's own tests and would fire
+  on every ordinary client that lists prompts or resources on connect, so it was dropped.
 - Distinct from `rapid_enumeration` (`tagging.py:151-154`), which counts tool calls
   only.
-- Hook: `_instrument_message`; a `set[str]` of feature methods seen, on the transport.
-- New capture: none beyond the method name.
-- False positives: generic MCP clients (for example inspector UIs) call all list
-  endpoints on connect. Mitigation: flag requires the two-method threshold and records
-  the `clientInfo` fingerprint, so known inspectors can be allow-listed analytically
-  rather than in code.
-- Tests: `tools/list` plus `prompts/list` flags once, not on every later call; one
-  method alone is not flagged. Negative: repeated `tools/list` does not flag
-  (`tools/list` is not in the feature set).
+- Hook: `_instrument_message`; a `set[str]` of feature methods seen, on the connection's
+  `ConnectionProtocolState`.
+- New capture: `mcp.feature_methods` on the flagging message.
+- False positives: generic MCP clients (for example inspector UIs) call several list
+  endpoints on connect. The `clientInfo` fingerprint is on the `initialize` span, so known
+  inspectors can be separated analytically rather than in code.
+- Tests: `prompts/list` then `resources/list` flags once, and a third distinct method
+  does not flag again; one method alone is not flagged. Negative: repeated `tools/list`
+  never flags.
 
 ### D4. `protocol_version_anomaly`
 
