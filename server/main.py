@@ -31,6 +31,7 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
+from starlette.types import Receive, Scope, Send
 
 setup_logging()
 
@@ -155,13 +156,22 @@ async def handle_sse(request: Request) -> None:
     )
 
 
-async def handle_messages(request: Request) -> None:
-    """``POST /messages`` — forward SSE messages to the transport."""
-    await sse_transport.handle_post_message(
-        request.scope,
-        request.receive,
-        request._send,  # noqa: SLF001
-    )
+class _PostMessages:
+    """``POST /messages`` — hand the raw ASGI call to the SSE transport.
+
+    The SDK's ``handle_post_message`` writes the HTTP response itself. As a
+    plain request function it returned ``None`` afterwards, and Starlette
+    then called that ``None`` as the response: every POST logged "Exception
+    in ASGI application" after the client already had its answer. Starlette
+    treats a non-function endpoint as a raw ASGI app, so no second response
+    is attempted.
+    """
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        await sse_transport.handle_post_message(scope, receive, send)
+
+
+handle_messages = _PostMessages()
 
 
 # ---------------------------------------------------------------------------
