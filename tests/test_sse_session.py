@@ -134,3 +134,109 @@ class TestSessionIdPropagation:
         assert len(minted) == 2
         assert minted[0] != minted[1]
         assert dispatched == minted
+
+
+async def _serve(app):
+    """Start *app* under uvicorn on a free port; return (server, task, port)."""
+    import uvicorn
+
+    port = _free_port()
+    server = uvicorn.Server(
+        uvicorn.Config(
+            app,
+            host="127.0.0.1",
+            port=port,
+            log_level="error",
+            timeout_graceful_shutdown=1,
+        )
+    )
+    task = asyncio.create_task(server.serve())
+    for _ in range(200):
+        if server.started:
+            break
+        await asyncio.sleep(0.025)
+    assert server.started, "uvicorn did not start"
+    return server, task, port
+
+
+async def _stop(server, task) -> None:
+    server.should_exit = True
+    server.force_exit = True
+    await asyncio.wait_for(task, timeout=10)
+
+
+class TestProtocolDetectionsEndToEnd:
+    """MCP-native detections observed through the real SSE server (spec P1)."""
+
+    async def test_real_client_session_records_version_and_raises_no_flags(
+        self, monkeypatch, span_exporter
+    ):
+        import main
+        from mcp import ClientSession
+        from mcp.client.sse import sse_client
+
+        minted: list[str] = []
+        original_transport = main.InstrumentedTransport
+
+        class RecordingTransport(original_transport):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                minted.append(self.session_id)
+
+        monkeypatch.setattr(main, "InstrumentedTransport", RecordingTransport)
+        server, task, port = await _serve(main.app)
+        try:
+            async with (
+                sse_client(f"http://127.0.0.1:{port}/sse") as (read, write),
+                ClientSession(read, write) as session,
+            ):
+                await asyncio.wait_for(session.initialize(), timeout=10)
+                await asyncio.wait_for(session.list_tools(), timeout=10)
+                await asyncio.wait_for(
+                    session.call_tool("read_file", {"path": "/etc/hostname"}),
+                    timeout=10,
+                )
+        finally:
+            await _stop(server, task)
+
+        (sid,) = minted
+        spans = [
+            s
+            for s in span_exporter.get_finished_spans()
+            if s.attributes.get("mcp.session_id") == sid and s.name.startswith("mcp.")
+        ]
+        names = [s.name for s in spans]
+        assert "mcp.initialize" in names
+        assert "mcp.tools/call" in names
+        init = next(s for s in spans if s.name == "mcp.initialize")
+        assert init.attributes["mcp.client.protocol_version"]
+        assert [s.attributes.get("anomaly.flags") for s in spans] == [""] * len(spans)
+
+    async def test_unknown_method_probe_is_flagged(self, span_exporter):
+        import main
+        from mcp.client.sse import sse_client
+        from mcp.types import JSONRPCMessage
+
+        server, task, port = await _serve(main.app)
+        try:
+            async with sse_client(f"http://127.0.0.1:{port}/sse") as (_read, write):
+                probe = JSONRPCMessage.model_validate(
+                    {"jsonrpc": "2.0", "id": 99, "method": "admin/exec"}
+                )
+                await write.send(probe)
+                for _ in range(200):
+                    if any(
+                        s.name == "mcp.unknown_method" for s in span_exporter.get_finished_spans()
+                    ):
+                        break
+                    await asyncio.sleep(0.025)
+        finally:
+            await _stop(server, task)
+
+        flagged = [s for s in span_exporter.get_finished_spans() if s.name == "mcp.unknown_method"]
+        assert flagged, "the unknown-method probe produced no flagged span"
+        span = flagged[0]
+        assert span.attributes["mcp.method.raw"] == "admin/exec"
+        assert "unknown_method" in span.attributes["anomaly.flags"].split(",")
+        # No initialize was sent, so the lifecycle rule fires on the same message.
+        assert "lifecycle_violation" in span.attributes["anomaly.flags"].split(",")
