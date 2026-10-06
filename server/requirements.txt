@@ -29,6 +29,6 @@ limits==5.8.0  # imported directly for the /messages rate limit (TOD-1056)
 
 # Testing
 pytest==9.1.1
-pytest-asyncio==1.3.0
+pytest-asyncio==1.4.0
 pytest-cov==7.1.0
 httpx==0.28.1
