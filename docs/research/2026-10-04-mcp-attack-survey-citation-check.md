@@ -1,4 +1,4 @@
-> Provenance: Written 2026-10-04 by a Haiku critic pass over the survey: each URL was fetched and its claim checked against the page text. References to `gaps-kimi.md` mean `2026-10-04-code-gap-analysis.md`, and `survey-fugu.md` means `2026-10-04-mcp-attack-survey.md`. Bug B1 (session id `unknown`) and the `GET /sse` 500 were fixed after this was written, by #47 and #46.
+> Provenance: Written 2026-10-04 as a critic pass over the survey: each URL was fetched and its claim checked against the page text. References to `gaps-kimi.md` mean `2026-10-04-code-gap-analysis.md`, and `survey-fugu.md` means `2026-10-04-mcp-attack-survey.md`. Bug B1 (session id `unknown`) and the `GET /sse` 500 were fixed after this was written, by #47 and #46.
 
 # Citation Audit: MCP Attack Survey (survey-fugu.md)
 

@@ -29,42 +29,47 @@
             └── pvc.yaml
 
 ## values.yaml
+
+Condensed from the chart's `helm/values.yaml` (read that file for the exact
+keys; every image tag is pinned — the chart never uses `latest`):
+
     global:
       namespace: mcp-honeypot
       imagePullPolicy: IfNotPresent
 
-    mcpHoneypot:
-      image: ghcr.io/todie/mcp-honeypot:latest
+    honeypot:
+      image: { repository: ghcr.io/todie/mcp-honeypot, tag: "0.1.0" }
       replicas: 1
       port: 8000
-      metricsPort: 8001
-      transport: sse
 
     otelCollector:
-      image: otel/opentelemetry-collector-contrib:latest
+      image: { repository: otel/opentelemetry-collector-contrib, tag: "0.96.0" }
       grpcPort: 4317
       httpPort: 4318
       prometheusExportPort: 8889
 
     prometheus:
-      image: prom/prometheus:latest
+      image: { repository: prom/prometheus, tag: "v2.51.0" }
       port: 9090
-      retention: 30d
+      retentionTime: "30d"
+      retentionSize: "10GB"
       storage: 10Gi
 
     jaeger:
-      image: jaegertracing/all-in-one:latest
+      image: { repository: jaegertracing/all-in-one, tag: "1.55" }
       uiPort: 16686
-      collectorPort: 14250
+      otlpGrpcPort: 4317
       storage: 20Gi
-      spanTTL: 168h
+      # No span TTL key in the chart; the 168 h trace TTL lives in the
+      # Compose stack (BADGER_SPAN_STORE_TTL).
 
     grafana:
-      image: grafana/grafana:latest
+      image: { repository: grafana/grafana, tag: "10.4.0" }
       port: 3000
       storage: 5Gi
+      # The chart ships a default admin login; override it for production.
       adminUser: admin
-      adminPassword: ""
+      adminPassword: honeypot
 
 ## Docker Compose (Local Dev)
     version: "3.9"
