@@ -1,6 +1,6 @@
-> Provenance: Written 2026-10-04 by kimi-k3 (omp, lane w18:p3) against `590ede9`, read-only. Line numbers refer to that commit. References to `gaps-kimi.md` mean `2026-10-04-code-gap-analysis.md`, and `survey-fugu.md` means `2026-10-04-mcp-attack-survey.md`. Bug B1 (session id `unknown`) and the `GET /sse` 500 were fixed after this was written, by #47 and #46.
+> Provenance: Written 2026-10-04 against `590ede9`, read-only. Line numbers refer to that commit. References to `gaps-kimi.md` mean `2026-10-04-code-gap-analysis.md`, and `survey-fugu.md` means `2026-10-04-mcp-attack-survey.md`. Bug B1 (session id `unknown`) and the `GET /sse` 500 were fixed after this was written, by #47 and #46.
 
-# Code gap analysis — MCP-native detections (kimi, w18:p3)
+# Code gap analysis — MCP-native detections
 
 Scope: `server/main.py`, `server/transport_wrapper.py`, `server/tagging.py`,
 `server/tools/registry.py`, `server/instrumentation.py`, `server/tools/handlers/*`,

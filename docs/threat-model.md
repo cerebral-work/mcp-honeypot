@@ -4,7 +4,7 @@
 
 ### 1. Reconnaissance / Enumeration
 Sequential tools/list calls followed by parameter probing.
-Detection: >5 enumeration calls in <10s → rapid_enumeration flag
+Detection: >10 enumeration calls in <5s → rapid_enumeration flag
 
 ### 2. Credential Harvesting
 Agent targets secrets, env vars, or config files. First high-intent signal.

@@ -115,7 +115,7 @@ All variables are documented in [`.env.example`](.env.example).  Key ones:
 ## Testing
 
 ```bash
-# Unit tests (135 tests, no Docker required)
+# Unit tests (389 as of 2026-10-05, no Docker required; 3 integration tests self-skip without the stack)
 make test
 
 # Full CI locally (lint + typecheck + test + secrets scan + Docker build)

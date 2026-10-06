@@ -183,7 +183,7 @@ Complexity: M | Depends: T44, T46, T47
   - Health check all providers
 - `tests/test_yaml_provider.py` (~20 tests)
   - Parse single/multi tool YAML files
-  - All 14 template functions produce valid output
+  - All 13 template functions produce valid output
   - Invalid YAML → warning, not crash
   - Empty directory → 0 tools
   - Template syntax errors → skip tool, warn

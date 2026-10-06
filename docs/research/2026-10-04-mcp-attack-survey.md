@@ -1,4 +1,4 @@
-> Provenance: Written 2026-10-04 by Sakana fugu-ultra (opencode, lane w18:p4) for the MCP-native detections spec. Kept as written so that "survey §N" citations in `docs/spec-mcp-native-detections.md` resolve. References to `gaps-kimi.md` mean `2026-10-04-code-gap-analysis.md`, and `survey-fugu.md` means `2026-10-04-mcp-attack-survey.md`. Bug B1 (session id `unknown`) and the `GET /sse` 500 were fixed after this was written, by #47 and #46.
+> Provenance: Written 2026-10-04 for the MCP-native detections spec. Kept as written so that "survey §N" citations in `docs/spec-mcp-native-detections.md` resolve. References to `gaps-kimi.md` mean `2026-10-04-code-gap-analysis.md`, and `survey-fugu.md` means `2026-10-04-mcp-attack-survey.md`. Bug B1 (session id `unknown`) and the `GET /sse` 500 were fixed after this was written, by #47 and #46.
 
 # Survey: published MCP-specific attack classes as of 2026
 

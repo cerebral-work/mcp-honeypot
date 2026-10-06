@@ -40,7 +40,7 @@ See [spec-plugin-system.md](spec-plugin-system.md) for the full specification.
 **Key deliverables:**
 - `ToolProvider` protocol with `owns_tool()`, `health_check()`, `reload()`
 - `ProviderRegistry` for discovery, loading, merging, conflict resolution
-- YAML provider with 14 template functions
+- YAML provider with 13 template functions
 - Hot-reload via filesystem watch
 - Community provider packaging via entry_points
 - Backward compatibility shim for v0.2.0 config
