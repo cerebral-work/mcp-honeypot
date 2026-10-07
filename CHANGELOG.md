@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.1.0 (2026-10-07)
+
+
+### Features
+
+* apply terrarium federation standards ([b75804d](https://github.com/cerebral-work/mcp-honeypot/commit/b75804d1779036d68b4b9349d81ca7eef23ea95e))
+* **server:** cap request bodies at 1 MiB (TOD-1056) ([93b90cd](https://github.com/cerebral-work/mcp-honeypot/commit/93b90cd3cc964e07a645e2e06adfa523b3bc6b11))
+* **server:** per-client-IP rate limit on POST /messages (TOD-1056) ([f2a2ded](https://github.com/cerebral-work/mcp-honeypot/commit/f2a2dedf6c87ffa43f61fa758a6be574e74d0dc3))
+* **server:** protocol_tagging module for MCP-native detections D1-D6 ([3bcaa5d](https://github.com/cerebral-work/mcp-honeypot/commit/3bcaa5d62ef45b3e0dd2b84f5214a5c6ab5b0886))
+* **server:** put protocol findings on message spans and the anomaly counter ([002de99](https://github.com/cerebral-work/mcp-honeypot/commit/002de997351a4658cb0d37d5bd611df1ec8765ee))
+
+
+### Bug Fixes
+
+* **deps:** align OpenTelemetry packages on 1.45.0 / 0.66b0 ([8fff849](https://github.com/cerebral-work/mcp-honeypot/commit/8fff84958a506272bfb91ad97c875619e5115bab))
+* **deps:** align opentelemetry-instrumentation-asgi with the 0.53b0 line (unbreaks all PR CI) ([#33](https://github.com/cerebral-work/mcp-honeypot/issues/33)) ([5b2e420](https://github.com/cerebral-work/mcp-honeypot/commit/5b2e42009143d3175f22aa64dd3aff3e96fc71eb))
+* **server:** give tool handlers the caller's session id ([d6dec5f](https://github.com/cerebral-work/mcp-honeypot/commit/d6dec5f0609fee14c43741ddaa29a146552b9299))
+* **server:** harden protocol_tagging against evasion and oversized input ([21326af](https://github.com/cerebral-work/mcp-honeypot/commit/21326af6d121cda147c9920e9a336a4388292f6b))
+* **server:** stop every GET /sse returning 500 ([fc7f96a](https://github.com/cerebral-work/mcp-honeypot/commit/fc7f96a2cf2bb6b27f299c53dd2d395c75a5efdd))
+* **server:** stop every POST /messages raising after the SDK replies ([015362f](https://github.com/cerebral-work/mcp-honeypot/commit/015362f43d83ac038a4cc7a7106e35d13faa6680))
+
+
+### Documentation
+
+* add the survey, gap analysis and citation check behind the spec ([c5d5e52](https://github.com/cerebral-work/mcp-honeypot/commit/c5d5e527fc5a3d16ded1e94cab3be5c5b73f6f84))
+* document the protocol-level detections ([67baeaf](https://github.com/cerebral-work/mcp-honeypot/commit/67baeafd3c7cb1fb256cd7b745e0b3bbce2c7a31))
+* name D2 by its flag, lifecycle_violation ([fb6377a](https://github.com/cerebral-work/mcp-honeypot/commit/fb6377a1ed86afaf6ddf3edef8a270f937da97d8))
+* reconcile the five conflicts found by the R&D site review ([c083980](https://github.com/cerebral-work/mcp-honeypot/commit/c08398016bdb26fd7e172cd196eea8f34af4b362))
+* record operator rulings on spec decisions 1, 2, 4 and 6 ([4bbc486](https://github.com/cerebral-work/mcp-honeypot/commit/4bbc4865c3e834a23052ec4f9749bb7c8e9d32c0))
+* record operator rulings on spec decisions 3, 5, 7, 8 and 9 ([1d07bbb](https://github.com/cerebral-work/mcp-honeypot/commit/1d07bbb30d5468bfd5c03287b68aa3b9e9fc1531))
+* spec for MCP-native detections ([7da0512](https://github.com/cerebral-work/mcp-honeypot/commit/7da0512c7465135e1f8d357d8aff6a93ed15c54e))
+
 ## [Unreleased]
 
 ### Added
