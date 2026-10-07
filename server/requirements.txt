@@ -21,7 +21,7 @@ pydantic-settings==2.15.0
 pydantic==2.13.4
 
 # Structured logging
-structlog==25.1.0
+structlog==26.1.0
 
 # Rate limiting (T18)
 slowapi==0.1.9
