@@ -6,7 +6,7 @@ uvicorn[standard]==0.42.0
 starlette==1.7.0
 
 # OpenTelemetry — SDK
-opentelemetry-sdk==1.45.0
+opentelemetry-sdk==1.45.1
 opentelemetry-api==1.45.0
 
 # OpenTelemetry — OTLP exporter (gRPC, for sending to collector)
