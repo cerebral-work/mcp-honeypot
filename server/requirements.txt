@@ -18,7 +18,7 @@ opentelemetry-instrumentation-asgi==0.66b0
 
 # Configuration via environment variables
 pydantic-settings==2.15.0
-pydantic==2.13.4
+pydantic==2.14.1
 
 # Structured logging
 structlog==25.1.0
