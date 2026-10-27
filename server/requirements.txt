@@ -24,7 +24,7 @@ pydantic==2.13.4
 structlog==25.1.0
 
 # Rate limiting (T18)
-slowapi==0.1.9
+slowapi==0.1.10
 limits==5.8.0  # imported directly for the /messages rate limit (TOD-1056)
 
 # Testing
