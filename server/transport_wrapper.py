@@ -47,26 +47,28 @@ def derive_session_id(remote_ip: str, connect_ts: float) -> str:
 
 
 def _extract_agent_from_user_agent(headers: list[tuple[bytes, bytes]]) -> str | None:
-    """Pull the User-Agent value from raw ASGI headers, if present."""
+    """Pull the User-Agent value from raw ASGI headers, if present (bounded to 256 chars)."""
     for name, value in headers:
         if name.lower() == b"user-agent":
             ua = value.decode("utf-8", errors="replace").strip()
             if ua:
-                return ua
+                return truncate(ua)
     return None
 
 
 def _extract_agent_from_initialize(message: dict[str, Any]) -> str | None:
-    """Extract ``clientInfo.name/version`` from an MCP initialize request."""
+    """Extract ``clientInfo.name/version`` from an MCP initialize request (bounded to 256 chars)."""
     params = message.get("params", {})
-    client_info = params.get("clientInfo") or params.get("client_info")
-    if not client_info:
+    if not isinstance(params, dict):
         return None
-    name = client_info.get("name", "")
-    version = client_info.get("version", "")
+    client_info = params.get("clientInfo") or params.get("client_info")
+    if not isinstance(client_info, dict) or not client_info:
+        return None
+    name = str(client_info.get("name", "") or "")
+    version = str(client_info.get("version", "") or "")
     if name and version:
-        return f"{name}/{version}"
-    return name or None
+        return truncate(f"{name}/{version}")
+    return truncate(name) if name else None
 
 
 # ---------------------------------------------------------------------------

@@ -279,3 +279,33 @@ def get_category(tool_name: str) -> str:
     """Return the category for *tool_name*, or ``'unknown'``."""
     meta = TOOL_REGISTRY.get(tool_name)
     return meta.category if meta else "unknown"
+
+
+MAX_DISTINCT_AGENT_LABELS: int = 256
+_seen_agent_labels: set[str] = set()
+
+
+def metric_tool_label(tool_name: str) -> str:
+    """Return a bounded Prometheus label for *tool_name* (known tool or ``'other'``)."""
+    return tool_name if tool_name in TOOL_REGISTRY else "other"
+
+
+def span_tool_name(tool_name: str) -> str:
+    """Return a fixed-vocabulary span operation name for *tool_name*."""
+    return f"tool.{tool_name}" if tool_name in TOOL_REGISTRY else "tool.unknown"
+
+
+def bounded_agent_label(agent_id: str) -> str:
+    """Cap distinct ``agent_id`` metric label values per process to prevent cardinality DoS."""
+    normalized = (agent_id or "unknown")[:64]
+    if normalized in _seen_agent_labels:
+        return normalized
+    if len(_seen_agent_labels) < MAX_DISTINCT_AGENT_LABELS:
+        _seen_agent_labels.add(normalized)
+        return normalized
+    return "other"
+
+
+def reset_agent_label_budget() -> None:
+    """Clear the seen ``agent_id`` label set (used by unit tests)."""
+    _seen_agent_labels.clear()

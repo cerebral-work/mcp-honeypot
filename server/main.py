@@ -42,8 +42,9 @@ setup_telemetry()
 
 from config import settings  # noqa: E402
 from middleware import add_middleware, allow_message, limiter, sse_limit  # noqa: E402
+from protocol_tagging import truncate  # noqa: E402
 from tools.handlers import dispatch  # noqa: E402
-from tools.registry import TOOL_REGISTRY  # noqa: E402
+from tools.registry import TOOL_REGISTRY, span_tool_name  # noqa: E402
 from transport_wrapper import InstrumentedTransport  # noqa: E402
 
 logger = get_logger(__name__)
@@ -88,9 +89,9 @@ async def call_tool(
     session_id = session_id_var.get() or "unknown"
 
     with tracer.start_as_current_span(
-        f"tool.{name}",
+        span_tool_name(name),
         attributes={
-            "mcp.tool": name,
+            "mcp.tool": truncate(name),
             "mcp.session_id": session_id,
             "honeypot.phase": settings.honeypot_phase,
         },

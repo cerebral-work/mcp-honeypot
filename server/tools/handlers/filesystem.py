@@ -12,9 +12,11 @@ from instrumentation import (
     mcp_tool_calls_total,
 )
 from opentelemetry.trace import Span
+from protocol_tagging import truncate
 from tagging import detect_anomalies
 
 from tools import fake_responses
+from tools.registry import bounded_agent_label, metric_tool_label
 
 
 async def handle(
@@ -27,15 +29,17 @@ async def handle(
     try:
         # 1. Anomaly detection
         flags: list[str] = detect_anomalies(tool_name, params, session_id)
+        tool_label = metric_tool_label(tool_name)
+        agent_label = bounded_agent_label(session_id)
 
         # 2. Span attributes
-        span.set_attribute("mcp.tool", tool_name)
+        span.set_attribute("mcp.tool", truncate(tool_name))
         span.set_attribute("mcp.tool.params_json", json.dumps(params, default=str))
         span.set_attribute("mcp.tool.param_count", len(params))
         span.set_attribute("anomaly.flags", ",".join(flags) if flags else "")
 
         # 3. Metrics — tool call counter
-        mcp_tool_calls_total.add(1, {"tool": tool_name, "agent_id": session_id})
+        mcp_tool_calls_total.add(1, {"tool": tool_label, "agent_id": agent_label})
 
         # 4. Metrics — per-flag anomaly counters
         for flag in flags:
@@ -51,7 +55,7 @@ async def handle(
         span.set_attribute("honeypot.response_preview", response.preview)
 
         # 7. Latency histogram
-        mcp_response_latency_ms.record(latency_ms, {"tool": tool_name})
+        mcp_response_latency_ms.record(latency_ms, {"tool": tool_label})
 
         return response.payload
 

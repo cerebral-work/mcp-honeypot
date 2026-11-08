@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI now lints tools/ and examples/
 
 ### Fixed
+- Bound `tool` and `agent_id` metric labels (`metric_tool_label` maps unknown tool names to `"other"`, `bounded_agent_label` caps distinct `agent_id` series at `MAX_DISTINCT_AGENT_LABELS = 256` and overflows to `"other"`), bound tool span names via `span_tool_name` (`"tool.<known>"` or `"tool.unknown"`), and truncate `mcp.tool` and `agent_id` span/session attributes to 256 characters (TOD-1053)
+- Pin `pydantic==2.13.4` in `server/requirements.txt` so `mcp==1.6.0` retains `pydantic._internal._typing_extra.eval_type_backport`
 - `POST /messages` no longer raises "Exception in ASGI application" after the SDK has replied
 - docs/threat-model.md: updated to match SHA-256 + TTL implementation
 - docs/storage.md: Badger env vars, root user, CLI retention flags

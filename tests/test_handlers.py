@@ -113,3 +113,35 @@ class TestHandlerHandle:
         with patch("tools.handlers.filesystem.detect_anomalies", return_value=[]):
             await filesystem.handle("list_directory", {"path": "."}, span, "s1")
         self.mock_latency.record.assert_called_once()
+
+    async def test_unknown_tool_bounds_metric_label_to_other_and_truncates_span(self):
+        span = MagicMock()
+        attacker_tool = "evil_tool_" + ("x" * 400)
+        with patch("tools.handlers.filesystem.detect_anomalies", return_value=[]):
+            await filesystem.handle(attacker_tool, {}, span, "s1")
+        args, _ = self.mock_counter.add.call_args
+        assert args[1]["tool"] == "other"
+        lat_args, _ = self.mock_latency.record.call_args
+        assert lat_args[1]["tool"] == "other"
+        attr_calls = {c[0][0]: c[0][1] for c in span.set_attribute.call_args_list}
+        assert attr_calls["mcp.tool"].startswith("evil_tool_")
+        assert attr_calls["mcp.tool"].endswith("...[truncated 410]")
+        assert len(attr_calls["mcp.tool"]) < len(attacker_tool)
+
+    async def test_agent_label_budget_caps_distinct_series_and_span_tool_name_is_fixed(self):
+        from tools.registry import (
+            MAX_DISTINCT_AGENT_LABELS,
+            bounded_agent_label,
+            reset_agent_label_budget,
+            span_tool_name,
+        )
+
+        assert span_tool_name("read_file") == "tool.read_file"
+        assert span_tool_name("attacker_invented_tool") == "tool.unknown"
+
+        reset_agent_label_budget()
+        for i in range(MAX_DISTINCT_AGENT_LABELS):
+            assert bounded_agent_label(f"sess-{i}") == f"sess-{i}"
+        assert bounded_agent_label("sess-overflow") == "other"
+        assert bounded_agent_label("sess-0") == "sess-0"
+        reset_agent_label_budget()
