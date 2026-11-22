@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 # Prevent .pyc files and enable unbuffered stdout/stderr for structured logs
 ENV PYTHONDONTWRITEBYTECODE=1     PYTHONUNBUFFERED=1
