@@ -1,5 +1,5 @@
 # MCP SDK (official Anthropic)
-mcp==1.6.0
+mcp==1.30.0
 
 # ASGI server
 uvicorn[standard]==0.54.0
