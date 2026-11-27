@@ -7,7 +7,7 @@ on:
 jobs:
   lint:
     name: Lint (ruff)
-    runs-on: ubuntu-latest
+    runs-on: {group: ent-default, labels: [self-hosted]}  # estate runner fleet (SOP: ci-runner-always-internal)
     steps:
       - uses: actions/checkout@v7
 
@@ -33,9 +33,13 @@ jobs:
 
   typecheck:
     name: Type-check (pyright)
-    runs-on: ubuntu-latest
+    runs-on: {group: ent-default, labels: [self-hosted]}  # estate runner fleet (SOP: ci-runner-always-internal)
     steps:
       - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - uses: actions/setup-python@v7
         with:
@@ -59,7 +63,7 @@ jobs:
   # Fast unit tests — pure logic, no external deps (~135 tests)
   test-unit:
     name: Unit tests
-    runs-on: ubuntu-latest
+    runs-on: {group: ent-default, labels: [self-hosted]}  # estate runner fleet (SOP: ci-runner-always-internal)
     steps:
       - uses: actions/checkout@v7
 
@@ -85,7 +89,7 @@ jobs:
   # Module tests — server modules with OTel/structlog (~50 tests)
   test-module:
     name: Module tests
-    runs-on: ubuntu-latest
+    runs-on: {group: ent-default, labels: [self-hosted]}  # estate runner fleet (SOP: ci-runner-always-internal)
     steps:
       - uses: actions/checkout@v7
 
@@ -111,7 +115,7 @@ jobs:
   # Tool/harness tests — adversarial agent, export, harness (~50 tests)
   test-tools:
     name: Tool tests
-    runs-on: ubuntu-latest
+    runs-on: {group: ent-default, labels: [self-hosted]}  # estate runner fleet (SOP: ci-runner-always-internal)
     steps:
       - uses: actions/checkout@v7
 
@@ -136,23 +140,25 @@ jobs:
 
   secrets:
     name: Secrets scan (gitleaks)
-    runs-on: ubuntu-latest
+    runs-on: {group: ent-default, labels: [self-hosted]}  # estate runner fleet (SOP: ci-runner-always-internal)
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       # gitleaks-action requires a paid GITLEAKS_LICENSE for org-owned repos;
-      # the gitleaks CLI itself is MIT — run it directly instead.
+      # run the MIT gitleaks CLI binary directly (no Docker daemon on ARC runners).
       - name: Run gitleaks
-        run: >
-          docker run --rm -v "$PWD:/repo"
-          zricethezav/gitleaks:v8.24.3
-          detect --source /repo --config /repo/.gitleaks.toml
-          --no-banner --redact
+        run: |
+          set -euo pipefail
+          VER=8.24.3
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VER}/gitleaks_${VER}_linux_x64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" detect --source . --config .gitleaks.toml --no-banner --redact
 
   docker:
     name: Docker build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

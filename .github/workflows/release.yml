@@ -8,7 +8,7 @@ on:
 jobs:
   release:
     name: Create GitHub Release
-    runs-on: ubuntu-latest
+    runs-on: {group: ent-default, labels: [self-hosted]}  # estate runner fleet (SOP: ci-runner-always-internal)
     permissions:
       contents: write
     steps:
